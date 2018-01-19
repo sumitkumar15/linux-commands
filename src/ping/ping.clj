@@ -23,7 +23,9 @@
        (do
          (Thread/sleep 1000)
          (let [r (make-icmp-req host timeout)]
+           (if (true? (first r))
            (println (str "received from" host ":icmp time= " (second r) " ms"))
+             (println "packet dropped"))
            (recur (dec k) (cons r xs))))))))
 
 (defn ping
@@ -41,7 +43,4 @@
         (println (str "-- " host " ping statistics --"))
         (println (str len " packets transmitted, "
                       received " packets received, "
-                      (* 100 (/ (- len received) len)) "% packet loss")))
-      )))
-
-(ping "192.168.0.103")
+                      (* 100 (/ (- len received) len)) "% packet loss"))))))
