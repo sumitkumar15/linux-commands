@@ -3,24 +3,8 @@
             [clojure.tools.cli :refer [parse-opts]])
   (:import (java.nio.file Files LinkOption)
            (java.nio.file Paths Path)
-           (java.net.URI)))
-
-(defn file-info
-  [fpath pattern]
-  (let [uri (java.net.URI. (str "file://" (.getAbsolutePath (io/file fpath))))
-        p (Paths/get uri)
-        info (into {}
-                   (Files/readAttributes
-                     p
-                     pattern
-                     (into-array LinkOption [LinkOption/NOFOLLOW_LINKS])))
-        final (clojure.string/join "  " (map (fn [x] (str (second x))) info))
-        ]
-    final))
-
-(defn print-out
-  [x]
-  (println x))
+           (java.net.URI)
+           (java.nio.file.attribute PosixFilePermissions)))
 
 (def cli-opts
   [["-a" "--all"]
@@ -31,92 +15,117 @@
    ["-s" "--size"]
    ["-l"
     :id :long-list]
-   ["-R" "--recursive"]])
+   ["-R" "--recursive"]
+   ["-p" "--indicator-style"]])
+
+(defn file-info
+  [fpath pattern]
+  (let [uri (java.net.URI. (str "file://" (.getAbsolutePath (io/file fpath))))
+        p (Paths/get uri)
+        info (into {}
+                   (Files/readAttributes
+                     p
+                     pattern
+                     (into-array LinkOption [LinkOption/NOFOLLOW_LINKS])))
+        pre (apply merge {:name fpath} (map (fn [x] {(first x) (str (second x))}) info))
+        final (assoc pre :permission
+                         (-> (Files/getPosixFilePermissions
+                               p
+                               (into-array LinkOption [LinkOption/NOFOLLOW_LINKS]))
+                             (PosixFilePermissions/toString)))
+        ]
+    final))
 
 (defn ls-base
   [dir]
   (let [files (seq (.list (io/file dir)))]
     files))
 
+(defn ls-base-info
+  [dir]
+  (let [files (seq (.list (io/file dir)))]
+    (map (fn [x] (file-info x "posix:owner,size,lastModifiedTime")) files)))
+
 (defn process-data
   [data opt]
   (cond
-    (= "-r" opt) (reverse data)
+    (nil? opt) (filter (fn [x] (not (clojure.string/starts-with? (:name x) "."))) data)
 
-    (= "-s" opt) (map (fn [x] [(.length (io/file x)) x]) data)
+    (= :reverse opt) (reverse data)
 
-    (or (= opt "-p") (= "-F" opt)) (map (fn [x]
+    (= :size opt) (map (fn [x]
+                         (assoc x :b-size (.length (io/file x))))
+                       data)
+
+    (or (= opt :indicator-style)) (map (fn [x]
                                           (if (.isDirectory (io/file x))
-                                            (str x "/") x)))
+                                            (update x :name #(str % "/")))))
 
-    (= "-m" opt) (clojure.string/join ", " data)
+    (= :fill opt) data
 
-    (= "-Q" opt) (map (fn [x] (str "\"" x "\"")) data)
+    (= :quote-name opt) (map (fn [x] (assoc x :name (str "\"" x "\""))) data)
 
     ;(= "-S" opt) (recur remm (-> (map (fn [x] [(.length (io/file x)) x]) data)
     ;                             #(sort-by first %)
     ;                             reverse
     ;                             #(map second %)))
 
-    (= :long-list opt) (-> (map (fn [x]
-                            (str (file-info x "posix:owner,size,lastModifiedTime") x))
-                          (filter #(not (clojure.string/starts-with? % ".")) data)))
+    (= :long-list opt) data
+    ;(-> (map (fn [x]
+    ;           (str (file-info x "posix:owner,size,lastModifiedTime") "  " x))
+    ;         (filter #(not (clojure.string/starts-with? % ".")) data)))
 
     ;(= "-R" opt)                                        ;todo implement recursive
     ))
-
-;(defn process
-;  [^:list data ^:list opts]
-;  (loop [[opt & remm] opts out data]
-;    (if (nil? opt)
-;      out
-;      (cond
-;        (= "-r" opt) (recur remm (reverse out))
-;
-;        (= "-s" opt) (recur remm (map (fn [x] [(.length (io/file x)) x]) out))
-;
-;        (or (= opt "-p") (= "-F" opt)) (recur remm (map (fn [x]
-;                                                          (if (.isDirectory (io/file x))
-;                                                            (str x "/") x))))
-;
-;        (= "-m" opt) (recur remm (clojure.string/join ", " out))
-;
-;        (= "-Q" opt) (recur remm (map (fn [x] (str "\"" x "\"")) out))
-;
-;        ;(= "-S" opt) (recur remm (-> (map (fn [x] [(.length (io/file x)) x]) out)
-;        ;                             #(sort-by first %)
-;        ;                             reverse
-;        ;                             #(map second %)))
-;
-;        (= "-l" opt) (recur remm
-;                            (-> (map (fn [x]
-;                                       (str (clojure.string/join
-;                                              "  "
-;                                              (file-info x "posix:owner,size,lastModifiedTime")) x))
-;                                     (filter #(not (clojure.string/starts-with? % ".")) out))))
-;
-;        ;(= "-R" opt)                                        ;todo implement recursive
-;        ))))
 
 (defn error-msg [errors]
   (str "The following errors occurred while parsing your command:\n\n"
        (clojure.string/join \newline errors)))
 
-(defn process-opts
-  [path options]
-  (if (:long-list options)
-    (println (process-data (ls-base path) :long-list))))
+;(defn process-opts
+;  [path options]
+;  (let [dirdata (ls-base-info path)]
+;    (cond
+;      (empty? options) (process-data dirdata nil)
+;      :default ()
+;      )))
+
+
+(defn print-out
+  [xs option-map]
+  (doseq [x xs]
+    (let [res (loop [mx (keys option-map) d x]
+                (if (nil? mx)
+                  d
+                  (recur (rest mx) (process-data d (first mx)))))]
+      (println (-> (list (:b-size res)
+                         (:permission res)
+                         (:owner res)
+                         (:size res)
+                         (:lastModifiedTime res)
+                         (:name res))
+                   (fn [x] (filter some? x))
+                   #(clojure.string/join "  " %)))
+      )))
 
 (defn ls
   [args]
   (println (clojure.tools.cli/parse-opts args cli-opts))
+  (println (file-info "LICENSE" "posix:owner,size,lastModifiedTime"))
   (let [{:keys [options arguments errors summary]}
         (clojure.tools.cli/parse-opts args cli-opts)]
     (cond
       (some? errors) (do (println (error-msg errors))
                          (println "Available options are:\n" summary))
       (empty? arguments) (let [path (System/getProperty "user.dir")]
-                         (process-opts path options))
-      (some? arguments) (let [path (first arguments)]
-                          (process-opts path options))
+                         (print-out (ls-base-info path) options))
+      (some? arguments) (if (= (count arguments) 1)
+                          (let [path (str (System/getProperty "user.dir")
+                                          "/"
+                                          (first arguments))]
+                            (print-out (ls-base-info path) options))
+                          (doseq [p arguments]
+                            (do
+                              (println p ":")
+                              (print-out (ls-base-info p) options))))
       )))
