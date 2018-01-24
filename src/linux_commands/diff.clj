@@ -1,5 +1,7 @@
 (ns linux-commands.diff
-  (:require [clojure.string :as cstr]))
+  (:require [clojure.string :as cstr]
+            [clojure.term.colors :as color]
+            [clojure.tools.cli :refer [parse-opts]]))
 
 (defn lcs
   ([x y]
@@ -26,19 +28,26 @@
    (let [ls (lcs l1 l2)]
      (generate-diff ls l1 l2 '())))
   ([[l & ls] [x & l1] [y & l2] final]
-    (if (nil? l)
-      (reverse final)
-      (cond
-        (and (= l x) (= l y)) (recur ls l1 l2 (cons [nil x] final))
-        (and (some? x) (not= l x)) (recur (cons l ls) l1 (cons y l2) (cons [\- x] final))
-        (and (some? y) (not= l y)) (recur (cons l ls) (cons x l1) l2 (cons [\+ y] final))))))
+   (if (nil? l)
+     (let [rlines (map (fn [x] [\- x]) (filter some? (cons x l1)))
+           alines (map (fn [y] [\+ y]) (filter some? (cons y l2)))]
+       (-> final
+           (into rlines)
+           (into alines)
+           reverse))
+     (cond
+       (and (= l x) (= l y)) (recur ls l1 l2 (cons [nil x] final))
+       (and (some? x) (not= l x)) (recur (cons l ls) l1 (cons y l2) (cons [\- x] final))
+       (and (some? y) (not= l y)) (recur (cons l ls) (cons x l1) l2 (cons [\+ y] final))))))
 
 (defn print-diff
   [inp]
   (doseq [[x strr] inp]
     (if (nil? x)
-      (println "     " strr)
-      (println x "   " strr))))
+      (println (color/yellow (str "     " strr)))
+      (println (if (= x \-)
+                 (color/red x "   " strr)
+                 (color/green x "   " strr))))))
 
 (defn diff-files
   [file1 file2]
@@ -46,6 +55,25 @@
         t2 (-> file2 slurp (cstr/split-lines))]
     (generate-diff t1 t2)))
 
-;(let [a (cstr/split "a b c d f g h j q z" #"\s+")
-;      b (cstr/split "a b c d e f g i j k r x y z" #"\s+")]
-;  (println (lcs a b)))
+(def curr-dir (str (System/getProperty "user.dir") "/"))
+(def cli-opts
+  [nil "--color"])
+
+(defn error-msg
+  [msg]
+  (str "The following errors occurred while parsing your command:\n\n"
+       (clojure.string/join \newline msg)))
+
+(defn diff
+  [args]
+  (let [{:keys [options arguments errors summary]}
+        (clojure.tools.cli/parse-opts args cli-opts)]
+    (cond
+      (some? errors) (do (println (error-msg errors) "\n")
+                         (println "Available options are:\n" summary))
+      (empty? arguments) (println "missing arguments: enter file names to compare")
+      (= 1 (count arguments)) (println "missing argument after " (first arguments))
+      (> (count arguments) 2) (println "extra operand " (nth arguments 2))
+      :default (let [path1 (str curr-dir (first arguments))
+                     path2 (str curr-dir (second arguments))]
+                 (print-diff (diff-files path1 path2))))))

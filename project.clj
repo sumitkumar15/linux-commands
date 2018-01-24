@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/tools.cli "0.3.5"]
                  [nio "1.0.3"]
+                 [clojure-term-colors "0.1.0-SNAPSHOT"]
                  [org.clojure/core.async "0.4.474"]]
   :main ^:skip-aot linux-commands.core
   :target-path "target/%s"
