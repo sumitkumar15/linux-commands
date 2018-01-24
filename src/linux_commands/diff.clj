@@ -1,7 +1,21 @@
 (ns linux-commands.diff
   (:require [clojure.string :as cstr]
             [clojure.term.colors :as color]
-            [clojure.tools.cli :refer [parse-opts]]))
+            [clojure.tools.cli :refer [parse-opts]]
+            [clojure.set :as cset]
+            [clojure.java.io :as io])
+  (:import (java.nio.file Paths Files LinkOption)
+           (java.nio.file.attribute PosixFilePermissions)
+           (java.net URI)))
+
+(defn last-modify
+  [fpath]
+  (let [uri (URI. (str "file://" (.getAbsolutePath (io/file fpath))))
+        p (Paths/get uri)
+        info (Files/getLastModifiedTime
+               p
+               (into-array LinkOption [LinkOption/NOFOLLOW_LINKS]))]
+    info))
 
 (defn lcs
   ([x y]
@@ -40,24 +54,68 @@
        (and (some? x) (not= l x)) (recur (cons l ls) l1 (cons y l2) (cons [\- x] final))
        (and (some? y) (not= l y)) (recur (cons l ls) (cons x l1) l2 (cons [\+ y] final))))))
 
-(defn print-diff
-  [inp]
-  (doseq [[x strr] inp]
-    (if (nil? x)
-      (println (color/yellow (str "     " strr)))
-      (println (if (= x \-)
-                 (color/red x "   " strr)
-                 (color/green x "   " strr))))))
-
 (defn diff-files
   [file1 file2]
   (let [t1 (-> file1 slurp (cstr/split-lines))
         t2 (-> file2 slurp (cstr/split-lines))]
     (generate-diff t1 t2)))
 
+(defn- diff-lists
+  [list1 list2]
+  (let [l1 (filter (fn [x] (not (cstr/starts-with? (.getName x) "."))) list1)
+        l2 (filter (fn [x] (not (cstr/starts-with? (.getName x) "."))) list2)
+        n1 (set (map #(.getName %) l1))
+        n2 (set (map #(.getName %) l2))
+        n (seq (cset/intersection n1 n2))
+        k1 (sort
+             (filter some?
+                     (map (fn [x] (if (some #(= (.getName x) %) n) x nil)) l1)))
+        k2 (sort
+             (filter some?
+                     (map (fn [x] (if (some #(= (.getName x) %) n) x nil)) l2)))]
+    ;{:from
+    ; :to
+    ; :diff
+    ; :from-modify
+    ; :to-modify}
+    (let [from (map (fn [x] {:from (.getPath x)}) k1)
+          to (map (fn [x] {:to (.getPath x)}) k2)
+          diff (map (fn [x y] {:diff (diff-files x y)}) k1 k2)
+          from-mod (map (fn [x] {:from-mod (str (last-modify (.getPath x)))}) k1)
+          to-mod (map (fn [x] {:to-mod (str (last-modify (.getPath x)))}) k2)]
+      (map merge to from diff from-mod to-mod))))
+
+(defn- diff-h
+  [path1 path2]
+  (let [f1 (io/file path1)
+        f2 (io/file path2)
+        l1 (if (.isDirectory f1) (seq (.listFiles f1)) (list f1))
+        l2 (if (.isDirectory f2) (seq (.listFiles f2)) (list f2))]
+    (diff-lists l1 l2)))
+
+(defn print-diff
+  [inp]
+  (doseq [[x strr] inp]
+    (if (nil? x)
+      (println (color/yellow (str "    " strr)))
+      (println (if (= x \-)
+                 (color/red x "  " strr)
+                 (color/green x "  " strr))))))
+
+(defn show-diff
+  ([data]
+   (doseq [d data]
+     (do (println "--- " (:from d) "  " (:from-mod d))
+         (println "+++ " (:to d) "  " (:to-mod d))
+         (print-diff (:diff d))))))
+
 (def curr-dir (str (System/getProperty "user.dir") "/"))
 (def cli-opts
-  [nil "--color"])
+  [[nil "--color"]
+   ["-a" "--text"]
+   ["-b" "--ignore-space-change"]
+   ["-B" "--ignore-blank-lines"]
+   [nil "--normal"]])
 
 (defn error-msg
   [msg]
@@ -76,4 +134,4 @@
       (> (count arguments) 2) (println "extra operand " (nth arguments 2))
       :default (let [path1 (str curr-dir (first arguments))
                      path2 (str curr-dir (second arguments))]
-                 (print-diff (diff-files path1 path2))))))
+                 (show-diff (diff-h path1 path2))))))
