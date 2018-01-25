@@ -1,36 +1,38 @@
 # linux-commands
 
-FIXME: description
+Learning & understanding Linux commands by implementing them on my own.
 
-## Installation
+These commands are not the full implementation but a subset of original commands with some supported flags.
 
-Download from http://example.com/FIXME.
+## Steps to Run
+
+Requires java & leiningen installed on the system
+
+1. Clone the repository
+
+2. cd into project root & run ```$ lein uberjar ```
+
+3. run the script.sh script ``` $ ./script.sh ```
+
+Following these steps will generate a runnable in terget/uberjar named `lterm`
 
 ## Usage
 
-FIXME: explanation
+Invoke the commands from lterm file
 
-    $ java -jar linux-commands-0.1.0-standalone.jar [args]
+    $ ./lterm ls
+    
+    $ ./lterm ls -l
+    
+    $ ./lterm ping ip
 
-## Options
+Alternatively you can put the `lterm` runnable on your global bin path & access it from anywhere
 
-FIXME: listing of options this app accepts.
+## Supported commands
 
-## Examples
-
-...
-
-### Bugs
-
-...
-
-### Any Other Sections
-### That You Think
-### Might be Useful
-
-## License
-
-Copyright © 2018 FIXME
+1. ls - list directory
+2. ping
+3. diff
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
