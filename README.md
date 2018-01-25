@@ -14,7 +14,7 @@ Requires java & leiningen installed on the system
 
 3. run the script.sh script ``` $ ./script.sh ```
 
-Following these steps will generate a runnable in terget/uberjar named `lterm`
+Following these steps will generate a runnable in target/uberjar named `lterm`
 
 ## Usage
 
@@ -34,5 +34,5 @@ Alternatively you can put the `lterm` runnable on your global bin path & access 
 2. ping
 3. diff
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+
+Check the cli-opts in source files to see supported flags
