@@ -90,28 +90,24 @@
 ;      :default ()
 ;      )))
 
-
 (defn print-out
   [xs option-map]
   (doseq [x xs]
     (let [res (loop [mx (keys option-map) d x]
-                (if (nil? mx)
+                (if (empty? mx)
                   d
                   (recur (rest mx) (process-data d (first mx)))))]
-      (println (-> (list (:b-size res)
-                         (:permission res)
-                         (:owner res)
-                         (:size res)
-                         (:lastModifiedTime res)
-                         (:name res))
-                   (fn [x] (filter some? x))
-                   #(clojure.string/join "  " %)))
-      )))
+      (println (clojure.string/join
+                 "  "
+                 (filter some? (list (:b-size res)
+                                     (:permission res)
+                                     (:owner res)
+                                     (:size res)
+                                     (:lastModifiedTime res)
+                                     (:name res))))))))
 
 (defn ls
   [args]
-  (println (clojure.tools.cli/parse-opts args cli-opts))
-  (println (file-info "LICENSE" "posix:owner,size,lastModifiedTime"))
   (let [{:keys [options arguments errors summary]}
         (clojure.tools.cli/parse-opts args cli-opts)]
     (cond
@@ -128,4 +124,4 @@
                             (do
                               (println p ":")
                               (print-out (ls-base-info p) options))))
-      )))
+      :default nil)))
