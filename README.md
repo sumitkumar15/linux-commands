@@ -37,6 +37,6 @@ Alternatively you can put the `lterm` runnable on your global bin path & access 
 3. diff
 
 
-Check the cli-opts in source files to see supported flags
+Check the cli-opts in source files to see supported flags.
 
 Just a learning project , will try to keep adding more commands in future.
